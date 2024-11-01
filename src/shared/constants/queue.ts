@@ -1,0 +1,11 @@
+export const QUEUE_NAME = {
+  PERSIST_DB: 'PERSIST_DB',
+};
+
+export const QUEUE_PROCESSOR = {
+  PERSIST_DB: {
+    TOKEN: 'TOKEN',
+    TRANSACTION: 'TRANSACTION',
+    TOKEN_PRICE: 'TOKEN_PRICE',
+  },
+};

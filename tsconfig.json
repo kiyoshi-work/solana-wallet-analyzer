@@ -1,0 +1,38 @@
+{
+  "compilerOptions": {
+    "module": "commonjs",
+    "declaration": true,
+    "removeComments": true,
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "allowSyntheticDefaultImports": true,
+    "target": "es2017",
+    "sourceMap": true,
+    "outDir": "./dist",
+    "baseUrl": "./src",
+    "incremental": true,
+    "skipLibCheck": true,
+    "strictNullChecks": false,
+    "noImplicitAny": false,
+    "strictBindCallApply": false,
+    "forceConsistentCasingInFileNames": false,
+    "noFallthroughCasesInSwitch": false,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "paths": {
+      "@/database": ["modules/database/index"],
+      "@/database/*": ["modules/database/*"],
+      "@/api": ["modules/api/index"],
+      "@/api/*": ["modules/api/*"],
+      "@/business/*": ["modules/business/*"],
+      "@/shared/*": ["shared/*"],
+      "@/worker/*": ["modules/worker/*"],
+      "@/queue/*": ["modules/queue/*"],
+      "@/crawler/*": ["modules/crawler/*"],
+      "@/blockchain": ["modules/blockchain/index"],
+      "@/blockchain/*": ["modules/blockchain/*"],
+      "@/redis-cache/*": ["modules/redis-cache/*"]
+    }
+  },
+  "include": ["src"]
+}
