@@ -2,6 +2,7 @@ import { Module, OnApplicationBootstrap } from '@nestjs/common';
 import { configCrawler } from './configs/crawler';
 import { ConfigModule } from '@nestjs/config';
 import { BirdEyeService } from './services/birdeye.service';
+import { ParseTxService } from './services/parse-tx.service';
 
 @Module({
   imports: [
@@ -11,12 +12,19 @@ import { BirdEyeService } from './services/birdeye.service';
       load: [configCrawler],
     }),
   ],
-  providers: [BirdEyeService],
-  exports: [BirdEyeService],
+  providers: [BirdEyeService, ParseTxService],
+  exports: [BirdEyeService, ParseTxService],
 })
 export class CrawlerModule implements OnApplicationBootstrap {
-  constructor(private readonly birdEyeService: BirdEyeService) {}
+  constructor(
+    private readonly birdEyeService: BirdEyeService,
+    private readonly parseTxService: ParseTxService,
+  ) {}
   async onApplicationBootstrap() {
+    // const t = await this.parseTxService.parseSwap(
+    //   '2LiV75dFbLoujKWroxKo7LZxrwhuvaNhbK1WBgfYJV3vMF5iP3uCoig2bhqTsRQacWjotqpx7pFNgoz3D4TQei1J',
+    // );
+    // console.log(t);
     // const y = await this.birdEyeService.getWalletTradesHistory(
     //   'BNnN2MqfWLvgThYBsv6v8JQaYZXYKYahC5YCy27Ct1cX',
     //   200,

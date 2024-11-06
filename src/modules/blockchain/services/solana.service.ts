@@ -48,6 +48,7 @@ import { sign } from 'crypto';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { roundDate } from '@/shared/helper';
 import { QueueService } from '@/queue/queue.service';
+import { ParseTxService } from '@/crawler/services/parse-tx.service';
 
 export const BASE_ADDRESSES = [
   WRAPPED_SOLANA_ADDRESS,
@@ -97,6 +98,7 @@ export class SolanaService {
     @InjectPinoLogger(SolanaService.name)
     private readonly logger: PinoLogger,
     private readonly queueService: QueueService,
+    private readonly parseTxService: ParseTxService,
   ) {
     this.rpcs = process.env.SOLANA_RPCS.split(',');
   }
@@ -729,6 +731,7 @@ export class SolanaService {
       for (let i = 0; i < transactions.length; i += batchSize) {
         const batch = transactions.slice(i, i + batchSize);
         let parsedBatch = await Promise.all(
+          // batch.map((tx) => this.parseTxService.parseSwap(tx.signature)),
           batch.map((tx) => this.getParseTransactionSolana(tx.signature)),
         );
         parsedBatch = parsedBatch.filter((tx) => tx);
@@ -748,6 +751,182 @@ export class SolanaService {
     );
   }
 
+  async groupTransactionOfWalletv2(
+    address: string,
+    limit: number = 200,
+    isOnlyDB: boolean = false,
+  ): Promise<IGroupedTransactionBuySell> {
+    const transactions = await this.getWalletTransactions(
+      address,
+      limit,
+      isOnlyDB,
+    );
+    // const transactions = data.filter(
+    //   (tx) =>
+    //     (BASE_ADDRESSES.includes(tx?.to?.address) &&
+    //       tx?.to?.uiAmount > 0.0001) ||
+    //     (BASE_ADDRESSES.includes(tx?.from?.address) &&
+    //       tx?.from?.uiAmount > 0.0001),
+    // );
+    const sell: IGroupedTransaction = {};
+    const buy: IGroupedTransaction = {};
+    const lastestSellTimeMap = {};
+    for (const tx of transactions) {
+      if (
+        !(BASE_ADDRESSES.includes(tx?.to?.address) && tx?.to?.uiAmount > 0.0001)
+      ) {
+        continue;
+      }
+      let tokenBalanceChange: any;
+      let baseBalanceChange: any;
+      if (BASE_ADDRESSES.includes(tx?.from?.address)) {
+        tokenBalanceChange = tx?.to;
+        baseBalanceChange = tx?.from;
+      } else {
+        tokenBalanceChange = tx?.from;
+        baseBalanceChange = tx?.to;
+      }
+      if (tokenBalanceChange?.address) {
+        const parsedTokenAmount = tokenBalanceChange.uiAmount;
+        const parsedUsdAmount =
+          baseBalanceChange?.address === WRAPPED_SOLANA_ADDRESS
+            ? baseBalanceChange?.uiAmount * tx.solanaPrice
+            : baseBalanceChange?.uiAmount;
+        const parsedSolAmount =
+          baseBalanceChange?.address === WRAPPED_SOLANA_ADDRESS
+            ? baseBalanceChange?.uiAmount
+            : baseBalanceChange?.uiAmount / tx.solanaPrice;
+        sell[tokenBalanceChange.address] = {
+          name: tokenBalanceChange.name,
+          address: tokenBalanceChange.address,
+          symbol: tokenBalanceChange.symbol,
+          totalToken:
+            (sell?.[tokenBalanceChange.address]?.totalToken || 0) +
+            Math.abs(parsedTokenAmount),
+          totalSolana:
+            (sell?.[tokenBalanceChange.address]?.totalSolana || 0) +
+            Math.abs(parsedSolAmount),
+          totalUSD:
+            (sell?.[tokenBalanceChange.address]?.totalUSD || 0) +
+            Math.abs(parsedUsdAmount),
+          blockTimes: [
+            ...(sell?.[tokenBalanceChange.address]?.blockTimes || []),
+            tx.blockUnixTime,
+          ],
+          // TODO: should remove that after experiment
+          ...(process.env.APP_ENV !== 'production' && {
+            txhs: [
+              ...(sell?.[tokenBalanceChange.address]?.txhs || []),
+              tx.txHash,
+            ],
+            listSolana: [
+              ...(sell?.[tokenBalanceChange.address]?.listSolana || []),
+              Math.abs(parsedSolAmount),
+            ],
+          }),
+        };
+        if (
+          tx.blockUnixTime.getTime() >
+          (lastestSellTimeMap?.[tokenBalanceChange.address]?.getTime() || 0)
+        ) {
+          lastestSellTimeMap[tokenBalanceChange.address] = tx.blockUnixTime;
+        }
+      }
+    }
+
+    for (const tx of transactions) {
+      if (
+        !(
+          BASE_ADDRESSES.includes(tx?.from?.address) &&
+          tx?.from?.uiAmount > 0.0001
+        )
+      ) {
+        continue;
+      }
+      let tokenBalanceChange: any;
+      let baseBalanceChange: any;
+      if (BASE_ADDRESSES.includes(tx?.to?.address)) {
+        tokenBalanceChange = tx?.from;
+        baseBalanceChange = tx?.to;
+      } else {
+        tokenBalanceChange = tx?.to;
+        baseBalanceChange = tx?.from;
+      }
+      if (tokenBalanceChange?.address) {
+        const parsedTokenAmount = tokenBalanceChange.uiAmount;
+        const parsedUsdAmount =
+          baseBalanceChange?.address === WRAPPED_SOLANA_ADDRESS
+            ? baseBalanceChange?.uiAmount * tx.solanaPrice
+            : baseBalanceChange?.uiAmount;
+        const parsedSolAmount =
+          baseBalanceChange?.address === WRAPPED_SOLANA_ADDRESS
+            ? baseBalanceChange?.uiAmount
+            : baseBalanceChange?.uiAmount / tx.solanaPrice;
+        buy[tokenBalanceChange.address] = {
+          name: tokenBalanceChange.name,
+          address: tokenBalanceChange.address,
+          symbol: tokenBalanceChange.symbol,
+          totalToken:
+            (buy?.[tokenBalanceChange.address]?.totalToken || 0) +
+            Math.abs(parsedTokenAmount),
+          totalSolana:
+            (buy?.[tokenBalanceChange.address]?.totalSolana || 0) +
+            Math.abs(parsedSolAmount),
+          totalUSD:
+            (buy?.[tokenBalanceChange.address]?.totalUSD || 0) +
+            Math.abs(parsedUsdAmount),
+          // NOTE: just for buy
+          totalTokenBeforeLastSell:
+            (buy?.[tokenBalanceChange.address]?.totalTokenBeforeLastSell || 0) +
+              tx.blockUnixTime.getTime() >
+            (lastestSellTimeMap?.[tokenBalanceChange.address]?.getTime() || 0)
+              ? 0
+              : Math.abs(parsedTokenAmount),
+          totalSolanaBeforeLastSell:
+            (buy?.[tokenBalanceChange.address]?.totalSolanaBeforeLastSell ||
+              0) +
+              tx.blockUnixTime.getTime() >
+            (lastestSellTimeMap?.[tokenBalanceChange.address]?.getTime() || 0)
+              ? 0
+              : Math.abs(parsedSolAmount),
+          totalUSDBeforeLastSell:
+            (buy?.[tokenBalanceChange.address]?.totalUSDBeforeLastSell || 0) +
+              tx.blockUnixTime.getTime() >
+            (lastestSellTimeMap?.[tokenBalanceChange.address]?.getTime() || 0)
+              ? 0
+              : Math.abs(parsedUsdAmount),
+          blockTimes: [
+            ...(buy?.[tokenBalanceChange.address]?.blockTimes || []),
+            tx.blockUnixTime,
+          ],
+          // TODO: should remove that after experiment
+          ...(process.env.APP_ENV !== 'production' &&
+            tx.blockUnixTime.getTime() <=
+              (lastestSellTimeMap?.[tokenBalanceChange.address]?.getTime() ||
+                0) && {
+              txhs: [
+                ...(buy?.[tokenBalanceChange.address]?.txhs || []),
+                tx.txHash,
+              ],
+              listSolana: [
+                ...(buy?.[tokenBalanceChange.address]?.listSolana || []),
+                Math.abs(parsedSolAmount),
+              ],
+              blockTimesBeforeLastSell: [
+                ...(buy?.[tokenBalanceChange.address]
+                  ?.blockTimesBeforeLastSell || []),
+                tx.blockUnixTime,
+              ],
+            }),
+        };
+      }
+    }
+    console.log(
+      `======== FETCHED ${Object.keys(buy).length} buy transactions and ${Object.keys(sell).length} sell transactions of ${address}`,
+    );
+    return { buy, sell };
+  }
+
   groupTransactionData(data: IParsedTransaction[]): IGroupedTransaction {
     return data.reduce((acc, tx) => {
       let tokenBalanceChange;
@@ -755,7 +934,6 @@ export class SolanaService {
       if (BASE_ADDRESSES.includes(tx?.from?.address)) {
         tokenBalanceChange = tx?.to;
         baseBalanceChange = tx?.from;
-        (acc?.[tx?.to?.address]?.totalBuyTransactions || 0) + 1;
       } else {
         tokenBalanceChange = tx?.from;
         baseBalanceChange = tx?.to;

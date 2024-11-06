@@ -3,7 +3,7 @@ import {
   ITokenInfo,
   ITransaction,
 } from '@/crawler/services/birdeye.service';
-import { Injectable, InternalServerErrorException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { RedisCacheService } from '@/redis-cache/redis-cache.service';
 import {
   BASE_ADDRESSES_ALL,
@@ -14,9 +14,11 @@ import {
   DeviceLogRepository,
   GainRepository,
   TokenRepository,
+  TransactionRepository,
 } from '@/database/repositories';
 import { CacheStrategy, UseResilience } from 'nestjs-resilience';
 import { QueueService } from '@/queue/queue.service';
+import { Transaction } from '@solana/web3.js';
 
 @Injectable()
 export class WalletService {
@@ -30,6 +32,7 @@ export class WalletService {
     private readonly solanaService: SolanaService,
     private readonly gainRepository: GainRepository,
     private readonly deviceLogRepository: DeviceLogRepository,
+    private readonly transactionRepository: TransactionRepository,
   ) {}
 
   async filledGroupedTransactions(
@@ -65,16 +68,17 @@ export class WalletService {
         (address) => !tokenInfoMap[address],
       );
       let tokensBirdeye: ITokenInfo[] = [];
-      // if (tokenAddressNotInDbs.length) {
-      //   console.log(
-      //     `========= TOTAL CALL METAPLEX to GET TOKEN INFO: ${tokenAddressNotInDbs?.length}`,
-      //   );
-      //   tokensBirdeye = await Promise.all(
-      //     tokenAddressNotInDbs.map((address) =>
-      //       this.solanaService.getTokenInfo(address),
-      //     ),
-      //   );
-      // }
+      // NOTE: comment when no need token info
+      if (tokenAddressNotInDbs.length) {
+        console.log(
+          `========= TOTAL CALL METAPLEX to GET TOKEN INFO: ${tokenAddressNotInDbs?.length}`,
+        );
+        tokensBirdeye = await Promise.all(
+          tokenAddressNotInDbs.map((address) =>
+            this.solanaService.getTokenInfo(address),
+          ),
+        );
+      }
       const formattedTokensBirdeye = tokensBirdeye
         .filter((dt) => dt?.address)
         .map((token) => ({
@@ -136,7 +140,7 @@ export class WalletService {
         await this.redisCacheService.hgetGroupTransaction(userAddress);
     }
     if (!(groupedTransactions && Object.keys(groupedTransactions).length)) {
-      groupedTransactions = await this.solanaService.groupTransactionOfWallet(
+      groupedTransactions = await this.solanaService.groupTransactionOfWalletv2(
         userAddress,
         force ? 800 : 800,
         isOnlyGetTransactionInDb,
@@ -144,13 +148,13 @@ export class WalletService {
       ); // ~3s
       groupedTransactions =
         await this.filledGroupedTransactions(groupedTransactions); // ~7s
-      // TODO: move to mongodb
-      // this.redisCacheService
-      //   .hsetGroupTransaction(userAddress, groupedTransactions, 5 * 60)
-      //   .then(() => this.logger.info('group transaction redis cache setted'))
-      //   .catch((err) => {
-      //     this.logger.error(err);
-      //   });
+      // TODO: move to mongodb -- NOTE: comment when running aggregate to not cache
+      this.redisCacheService
+        .hsetGroupTransaction(userAddress, groupedTransactions, 5 * 60)
+        .then(() => this.logger.info('group transaction redis cache setted'))
+        .catch((err) => {
+          this.logger.error(err);
+        });
     }
     return groupedTransactions;
   }
@@ -164,11 +168,11 @@ export class WalletService {
       },
       sellTransaction.blockTimes[0],
     );
-    const earliestBuyTime = buyTransaction.blockTimes.reduce(
+    const earliestBuyTime = buyTransaction?.blockTimes?.reduce(
       (minDate, currentDate) => {
         return currentDate < minDate ? currentDate : minDate;
       },
-      buyTransaction.blockTimes[0],
+      buyTransaction?.blockTimes[0],
     );
     const holdTime = Math.floor(
       (lastestSellTime.getTime() - earliestBuyTime.getTime()) /
@@ -178,6 +182,9 @@ export class WalletService {
     //   return;
     // }
     const buyTokenPrice = buyTransaction?.totalUSD / buyTransaction?.totalToken;
+    const buyTokenPriceBeforeSell =
+      buyTransaction?.totalUSDBeforeLastSell /
+      buyTransaction?.totalTokenBeforeLastSell;
     const sellTokenPrice =
       sellTransaction?.totalUSD / sellTransaction?.totalToken;
     const supply = buyTransaction?.supply;
@@ -185,17 +192,17 @@ export class WalletService {
     const numBuy = buyTransaction?.listSolana?.length;
     const numSell = sellTransaction?.listSolana?.length;
     const meanBuy =
-      buyTransaction?.listSolana.reduce((a, b) => a + b, 0) / numBuy;
+      buyTransaction?.listSolana?.reduce((a, b) => a + b, 0) / numBuy;
     const meanSell =
-      sellTransaction?.listSolana.reduce((a, b) => a + b, 0) / numSell;
+      sellTransaction?.listSolana?.reduce((a, b) => a + b, 0) / numSell;
     const stdevBuy = Math.sqrt(
-      buyTransaction?.listSolana.reduce(
+      buyTransaction?.listSolana?.reduce(
         (a, b) => a + Math.pow(b - meanBuy, 2),
         0,
       ) / numBuy,
     );
     const stdevSell = Math.sqrt(
-      sellTransaction?.listSolana.reduce(
+      sellTransaction?.listSolana?.reduce(
         (a, b) => a + Math.pow(b - meanSell, 2),
         0,
       ) / numSell,
@@ -214,6 +221,7 @@ export class WalletService {
       totalBuyToken: buyTransaction?.totalToken,
       totalBuySolana: buyTransaction?.totalSolana,
       avgBuyPrice: buyTransaction?.totalSolana / buyTransaction?.totalToken,
+
       holdTime: holdTime,
       solanaPrice: this.solanaPrice,
 
@@ -221,6 +229,16 @@ export class WalletService {
       soldAtMCC: sellTokenPrice * supply,
       pnl: sellTransaction.totalToken * (sellTokenPrice - buyTokenPrice),
       pnlPercent: (sellTokenPrice / buyTokenPrice - 1) * 100,
+
+      totalBuyTokenBeforeSell: buyTransaction?.totalTokenBeforeLastSell,
+      totalBuySolanaBeforeSell: buyTransaction?.totalSolanaBeforeLastSell,
+      avgBuyPriceBeforeSell:
+        buyTransaction?.totalSolanaBeforeLastSell /
+        buyTransaction?.totalTokenBeforeLastSell,
+      pnlBeforeSell:
+        sellTransaction.totalToken * (sellTokenPrice - buyTokenPriceBeforeSell),
+      pnlPercentBeforeSell:
+        (sellTokenPrice / buyTokenPriceBeforeSell - 1) * 100,
 
       numBuy,
       meanBuy,
@@ -230,6 +248,16 @@ export class WalletService {
       stdevSell,
       lastestSellTime,
       earliestBuyTime,
+
+      earliestBuyTimeBeforeSell:
+        buyTransaction?.blockTimesBeforeLastSell?.length > 0
+          ? buyTransaction?.blockTimesBeforeLastSell?.reduce(
+              (minDate, currentDate) => {
+                return currentDate < minDate ? currentDate : minDate;
+              },
+              buyTransaction?.blockTimesBeforeLastSell?.[0],
+            )
+          : null,
     };
   }
 
@@ -256,7 +284,8 @@ export class WalletService {
               where: { user_address: dt.address },
             }))
           ) {
-            ls.push(await this.gainOnlyDb(dt.address));
+            await this.gainOnlyDb(dt.address);
+            // ls.push();
           }
         }),
       );
@@ -284,7 +313,7 @@ export class WalletService {
     );
     this.saveGain(
       userAddress,
-      res.filter((dt) => dt.address),
+      res.filter((dt) => dt?.address),
     )
       .then(() => {
         console.log('save gain success');
@@ -341,16 +370,19 @@ export class WalletService {
           user_address: userAddress,
           token_address: dt.address,
           symbol: dt.symbol,
-          total_buy_solana: dt.totalBuySolana,
+
+          // total_buy_solana: dt.totalBuySolana,
+          // total_buy_token: dt.totalBuyToken,
+          // avg_buy_price: dt.avgBuyPrice,
+
           total_sell_solana: dt.totalSellSolana,
-          total_buy_token: dt.totalBuyToken,
           total_sell_token: dt.totalSellToken,
-          avg_buy_price: dt.avgBuyPrice,
           avg_sell_price: dt.avgSellPrice,
           sold_at_mcc: dt.soldAtMCC,
           bought_at_mcc: dt.boughtAtMCC,
-          pnl: dt.pnl,
-          pnl_percent: dt.pnlPercent,
+
+          // pnl: dt.pnl,
+          // pnl_percent: dt.pnlPercent,
           hold_time: dt.holdTime,
 
           num_buy: dt.numBuy,
@@ -360,10 +392,36 @@ export class WalletService {
           mean_sell: dt.meanSell,
           stdev_sell: dt.stdevSell,
           latest_sell: dt.lastestSellTime,
-          earliest_buy: dt.earliestBuyTime,
+          // earliest_buy: dt.earliestBuyTime,
+
+          earliest_buy: dt.earliestBuyTimeBeforeSell,
+          total_buy_solana: dt.totalBuySolanaBeforeSell,
+          total_buy_token: dt.totalBuyTokenBeforeSell,
+          avg_buy_price: dt.avgBuyPriceBeforeSell,
+          pnl: dt.pnlBeforeSell,
+          pnl_percent: dt.pnlPercentBeforeSell,
         })),
         { conflictPaths: ['user_address', 'token_address'] },
       );
     }
   }
+
+  // async recheckTransaction(take: number = 1000) {
+  //   const transactions = await this.transactionRepository.find({
+  //     where: { recheck: false },
+  //     take: take,
+  //     select: ['signature'],
+  //   });
+  //   const batchSize = 100;
+  //   if (transactions?.length) {
+  //     for (let i = 0; i < transactions.length; i += batchSize) {
+  //       const batch = transactions.slice(i, i + batchSize);
+  //       await Promise.all(
+  //         batch.map(async (dt) => {
+  //           await this.checkTransaction(dt.signature);
+  //         }),
+  //       );
+  //     }
+  //   }
+  // }
 }

@@ -59,7 +59,7 @@ export class BlockchainModule implements OnApplicationBootstrap {
     // fs.writeFileSync('output2.json', JSON.stringify(txhs, null, 2));
     // console.log(txhs, 'txhs');
     // const txh = await this.solanaService.getParseTransactionSolana(
-    //   '3MdDcNQ2Us33njP9Q16mvfw14vhwfjCyaZGdvzGeyTWBtAsPk3PgSvPykFcNaRDKwFt6Q8S6hVMkhw3Ujgph3KW4',
+    //   '2LiV75dFbLoujKWroxKo7LZxrwhuvaNhbK1WBgfYJV3vMF5iP3uCoig2bhqTsRQacWjotqpx7pFNgoz3D4TQei1J',
     // );
     // console.log(txh);
     // const y = await this.solanaService.getTokenInfo(

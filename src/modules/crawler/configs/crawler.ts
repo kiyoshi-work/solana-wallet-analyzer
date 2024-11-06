@@ -18,4 +18,7 @@ export const configCrawler = registerAs('crawler', () => ({
     host: process.env.COINGECKO_HOST || 'https://api.coingecko.com/api/v3',
     api_key: process.env.COINGECKO_API_KEY,
   },
+  parsetx: {
+    host: process.env.PARSE_TX_HOST || 'http://localhost:8080',
+  },
 }));

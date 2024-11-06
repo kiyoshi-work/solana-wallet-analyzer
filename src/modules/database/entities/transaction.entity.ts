@@ -62,6 +62,10 @@ export class TransactionEntity extends BaseEntity {
   })
   solana_price: number;
 
+  @Column({ default: false })
+  @Index()
+  recheck: boolean;
+
   //   @Column({
   //     type: 'jsonb',
   //     nullable: true,
