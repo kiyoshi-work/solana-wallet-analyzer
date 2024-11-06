@@ -67,19 +67,19 @@ export class WalletService {
       const tokenAddressNotInDbs = groupedTransactionsWithoutTokenInfo.filter(
         (address) => !tokenInfoMap[address],
       );
-      let tokensBirdeye: ITokenInfo[] = [];
+      let tokensInfoNotInDb: ITokenInfo[] = [];
       // NOTE: comment when no need token info
       if (tokenAddressNotInDbs.length) {
         console.log(
           `========= TOTAL CALL METAPLEX to GET TOKEN INFO: ${tokenAddressNotInDbs?.length}`,
         );
-        tokensBirdeye = await Promise.all(
+        tokensInfoNotInDb = await Promise.all(
           tokenAddressNotInDbs.map((address) =>
             this.solanaService.getTokenInfo(address),
           ),
         );
       }
-      const formattedTokensBirdeye = tokensBirdeye
+      const formattedTokensInfoNotInDB = tokensInfoNotInDb
         .filter((dt) => dt?.address)
         .map((token) => ({
           name: token.name,
@@ -98,7 +98,7 @@ export class WalletService {
             coinmarketcapId: token?.extensions?.coinmarketcapId,
           },
         }));
-      for (const token of formattedTokensBirdeye) {
+      for (const token of formattedTokensInfoNotInDB) {
         tokenInfoMap[token.address] = token;
       }
       for (const key of Object.keys(groupedTransactions.buy)) {
@@ -125,7 +125,7 @@ export class WalletService {
           };
         }),
       );
-      this.queueService.persistTokens(formattedTokensBirdeye);
+      this.queueService.persistTokens(formattedTokensInfoNotInDB);
     }
     return groupedTransactions;
   }

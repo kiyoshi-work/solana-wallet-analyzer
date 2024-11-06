@@ -43,8 +43,6 @@ import {
   PriceRepository,
   TransactionRepository,
 } from '@/database/repositories';
-import { In } from 'typeorm';
-import { sign } from 'crypto';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { roundDate } from '@/shared/helper';
 import { QueueService } from '@/queue/queue.service';
