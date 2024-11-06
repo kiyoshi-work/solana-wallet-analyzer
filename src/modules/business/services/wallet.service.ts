@@ -158,7 +158,7 @@ export class WalletService {
     }
     return groupedTransactions;
   }
-  async getGainInfo(
+  async getAnalyzeInfo(
     sellTransaction: ITransaction,
     buyTransaction: ITransaction,
   ) {
@@ -284,7 +284,7 @@ export class WalletService {
               where: { user_address: dt.address },
             }))
           ) {
-            await this.gainOnlyDb(dt.address);
+            await this.analyzeOnlyDb(dt.address);
             // ls.push();
           }
         }),
@@ -293,7 +293,7 @@ export class WalletService {
     return ls;
   }
 
-  async gainOnlyDb(userAddress: string) {
+  async analyzeOnlyDb(userAddress: string) {
     const [groupedTransactions] = await Promise.all([
       this.readThroughGroupTransaction(userAddress, true, true),
     ]);
@@ -305,7 +305,7 @@ export class WalletService {
             !BASE_ADDRESSES_ALL.includes(address),
         )
         .map((address: string) =>
-          this.getGainInfo(
+          this.getAnalyzeInfo(
             groupedTransactions?.sell[address],
             groupedTransactions?.buy[address],
           ),
@@ -328,7 +328,7 @@ export class WalletService {
   }
 
   @UseResilience(new CacheStrategy(3000))
-  async gained(userAddress: string) {
+  async analyze(userAddress: string) {
     const [groupedTransactions] = await Promise.all([
       this.readThroughGroupTransaction(userAddress),
     ]);
@@ -340,7 +340,7 @@ export class WalletService {
             !BASE_ADDRESSES_ALL.includes(address),
         )
         .map((address: string) =>
-          this.getGainInfo(
+          this.getAnalyzeInfo(
             groupedTransactions?.sell[address],
             groupedTransactions?.buy[address],
           ),

@@ -15,7 +15,7 @@ import {
 } from '../interceptors';
 import { ResponseMessage } from '@/shared/decorators/response-message.decorator';
 import { ApiBaseResponse } from '@/shared/swagger/decorator/api-response.decorator';
-import { ITokenGainedResponse } from '@/business/interfaces/wallet.interface';
+import { ITokenAnalyzeResponse } from '@/business/interfaces/wallet.interface';
 import { WalletService } from '@/business/services/wallet.service';
 import { SolanaAddress } from '@/api/decorator/solana-address.decorator';
 import { TDevice } from '@/shared/types';
@@ -29,31 +29,31 @@ export class WalletController {
     private readonly walletService: WalletService,
     private readonly deviceLogRepository: DeviceLogRepository,
   ) {}
-  @ApiBaseResponse(ITokenGainedResponse, {
+  @ApiBaseResponse(ITokenAnalyzeResponse, {
     statusCode: HttpStatus.OK,
     isArray: true,
     isPaginate: false,
   })
-  @ResponseMessage('Get gained successfully')
+  @ResponseMessage('Get successfully')
   @UseInterceptors(FormatResponseInterceptor)
   @UseInterceptors(HttpCacheInterceptor)
   @CacheTTL(10000)
   @UseGuards(CustomThrottlerGuard)
   @Throttle(20, 60)
-  @Get('/:user_address/gained')
-  async gained(
+  @Get('/:user_address/analyze')
+  async analyze(
     @SolanaAddress() user_address: string,
     @DeviceLogsDecorator() device: TDevice,
   ) {
     this.deviceLogRepository
       .log(user_address, device.ip)
       .then(() => {
-        console.log('Logged gained request');
+        console.log('Logged request');
       })
       .catch((err) => {
         console.log(err);
       });
-    return await this.walletService.gained(user_address);
+    return await this.walletService.analyze(user_address);
   }
 
   @Get('aggregate')

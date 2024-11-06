@@ -6,7 +6,7 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
   for (const address of addresses) {
     const response = await axios({
       method: 'get',
-      url: `http://localhost:8009/wallets/${address}/gained`,
+      url: `http://localhost:8009/wallets/${address}/analyze`,
     });
     console.log(response?.data?.status_code, address);
     await sleep(5000);

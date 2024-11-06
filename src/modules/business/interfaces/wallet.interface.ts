@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
-export class ITokenGainedResponse {
+export class ITokenAnalyzeResponse {
   @ApiPropertyOptional()
   logoURI: string;
 
