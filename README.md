@@ -7,7 +7,6 @@ The **Solana Wallet Analyzer** is a powerful tool designed to help users analyze
 - **Transaction Analysis**: Analyze buy/sell behavior of addresses through detailed transaction data, utilizing parsed transaction information from Solana RPC nodes. The analysis is based on `preTokenBalances` and `postTokenBalances`, employing a rule-based system to interpret transaction data effectively.
 - **Caching Mechanism**: Incorporates a robust caching mechanism to minimize the number of price requests to external paid data sources, such as Birdeye, enhancing performance and reducing costs.
 - **Batch Processing**: Efficiently processes large lists of addresses in batches to optimize performance.
-- **Progress Logging**: Provides real-time logging of processing progress for better user experience.
 
 ## Installation & Usage
 To get started with the Solana Transaction Analyzer, follow these steps:
